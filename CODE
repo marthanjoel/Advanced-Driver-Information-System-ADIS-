@@ -1,0 +1,112 @@
+#include <Wire.h>
+#include <LiquidCrystal_I2C.h>
+#include <ThreeWire.h>
+#include <RtcDS1302.h>
+
+// LCD
+LiquidCrystal_I2C lcd(0x27, 16, 2);
+
+// RTC (DS1302)
+ThreeWire myWire(4, 6, 5); // DAT, CLK, RST
+RtcDS1302<ThreeWire> Rtc(myWire);
+
+// LM35
+const int tempPin = A0;
+
+// RGB (COMMON CATHODE)
+const int bluePin = 9;
+const int redPin = 10;
+const int greenPin = 11;
+
+// Buzzer
+const int buzzer = 8;
+
+void setup() {
+
+  lcd.init();
+  lcd.backlight();
+
+  pinMode(bluePin, OUTPUT);
+  pinMode(redPin, OUTPUT);
+  pinMode(greenPin, OUTPUT);
+  pinMode(buzzer, OUTPUT);
+
+  Rtc.Begin();
+
+  lcd.setCursor(0,0);
+  lcd.print(" MINI ADIS ");
+  lcd.setCursor(0,1);
+  lcd.print(" STARTING ");
+  delay(2000);
+  lcd.clear();
+
+  // IMPORTANT: run ONCE only, then remove after upload
+  Rtc.SetDateTime(RtcDateTime(__DATE__, __TIME__));
+}
+
+void loop() {
+
+  // RTC time
+  RtcDateTime now = Rtc.GetDateTime();
+
+  // Temperature
+  int value = analogRead(tempPin);
+  float voltage = value * (5.0 / 1023.0);
+  float tempC = voltage * 100;
+
+  // LCD display
+  lcd.setCursor(0,0);
+
+  lcd.print(now.Day());
+  lcd.print("/");
+  lcd.print(now.Month());
+  lcd.print(" ");
+
+  lcd.print(now.Hour());
+  lcd.print(":");
+
+  if (now.Minute() < 10) lcd.print("0");
+  lcd.print(now.Minute());
+
+  lcd.setCursor(0,1);
+  lcd.print("T:");
+  lcd.print(tempC);
+  lcd.print((char)223);
+  lcd.print("C ");
+
+  // CONTROL LOGIC
+
+  if (tempC < 30) {
+
+    setColor(0,255,0);   // GREEN
+    noTone(buzzer);
+
+  }
+
+  else if (tempC < 40) {
+
+    setColor(255,255,0); // YELLOW
+    tone(buzzer, 1000);
+    delay(100);
+    noTone(buzzer);
+
+  }
+
+  else {
+
+    setColor(255,0,0);   // RED
+    tone(buzzer, 2000);
+
+  }
+
+  delay(1000);
+}
+
+// RGB FUNCTION (COMMON CATHODE FIX)
+void setColor(int r, int g, int b) {
+
+  analogWrite(redPin, r);
+  analogWrite(greenPin, g);
+  analogWrite(bluePin, b);
+
+}
