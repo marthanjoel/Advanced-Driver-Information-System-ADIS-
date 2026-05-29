@@ -1,112 +1,292 @@
+
 #include <Wire.h>
 #include <LiquidCrystal_I2C.h>
 #include <ThreeWire.h>
 #include <RtcDS1302.h>
 
+// ======================================================
 // LCD
+// ======================================================
+
 LiquidCrystal_I2C lcd(0x27, 16, 2);
 
-// RTC (DS1302)
-ThreeWire myWire(4, 6, 5); // DAT, CLK, RST
+// ======================================================
+// RTC DS1302
+// DAT, CLK, RST
+// ======================================================
+
+ThreeWire myWire(4, 6, 5);
 RtcDS1302<ThreeWire> Rtc(myWire);
 
-// LM35
+// ======================================================
+// SENSOR PINS
+// ======================================================
+
+// LM35 Temperature Sensor
 const int tempPin = A0;
 
-// RGB (COMMON CATHODE)
-const int bluePin = 9;
+// Water Sensor
+const int waterPin = A1;
+
+// ======================================================
+// RGB LED PINS
+// ======================================================
+
 const int redPin = 10;
 const int greenPin = 11;
+const int bluePin = 9;
 
-// Buzzer
+// ======================================================
+// BUZZER
+// ======================================================
+
 const int buzzer = 8;
+
+// ======================================================
+// WATER WARNING FLAG
+// ======================================================
+
+bool lowWaterWarningShown = false;
+
+// ======================================================
+// SETUP
+// ======================================================
 
 void setup() {
 
+  // SERIAL MONITOR
+  Serial.begin(9600);
+
+  // LCD
   lcd.init();
   lcd.backlight();
 
-  pinMode(bluePin, OUTPUT);
+  // RGB LED
   pinMode(redPin, OUTPUT);
   pinMode(greenPin, OUTPUT);
+  pinMode(bluePin, OUTPUT);
+
+  // BUZZER
   pinMode(buzzer, OUTPUT);
 
+  // RTC
   Rtc.Begin();
+
+  // ==================================================
+  // UNCOMMENT THIS LINE ONLY ONE TIME
+  // TO SET DATE AND TIME
+  // ==================================================
+
+  //Rtc.SetDateTime(RtcDateTime(__DATE__, __TIME__));
+
+  // ==================================================
+  // STARTUP SCREEN
+  // ==================================================
 
   lcd.setCursor(0,0);
   lcd.print(" MINI ADIS ");
-  lcd.setCursor(0,1);
-  lcd.print(" STARTING ");
-  delay(2000);
-  lcd.clear();
 
-  // IMPORTANT: run ONCE only, then remove after upload
-  Rtc.SetDateTime(RtcDateTime(__DATE__, __TIME__));
+  lcd.setCursor(0,1);
+  lcd.print(" SYSTEM READY ");
+
+  // STARTUP SOUND
+  tone(buzzer,1000);
+  delay(300);
+  noTone(buzzer);
+
+  delay(2000);
+
+  lcd.clear();
 }
+
+// ======================================================
+// LOOP
+// ======================================================
 
 void loop() {
 
-  // RTC time
+  // ==================================================
+  // GET DATE AND TIME
+  // ==================================================
+
   RtcDateTime now = Rtc.GetDateTime();
 
-  // Temperature
-  int value = analogRead(tempPin);
-  float voltage = value * (5.0 / 1023.0);
+  // ==================================================
+  // READ TEMPERATURE
+  // ==================================================
+
+  int tempValue = analogRead(tempPin);
+
+  float voltage = tempValue * (5.0 / 1023.0);
+
   float tempC = voltage * 100;
 
-  // LCD display
+  // ==================================================
+  // READ WATER SENSOR
+  // ==================================================
+
+  int waterValue = analogRead(waterPin);
+
+  // ==================================================
+  // SERIAL MONITOR
+  // ==================================================
+
+  Serial.print("DATE: ");
+
+  Serial.print(now.Day());
+  Serial.print("/");
+
+  Serial.print(now.Month());
+  Serial.print("/");
+
+  Serial.println(now.Year());
+
+  Serial.print("TIME: ");
+
+  Serial.print(now.Hour());
+  Serial.print(":");
+
+  if(now.Minute() < 10)
+    Serial.print("0");
+
+  Serial.println(now.Minute());
+
+  Serial.print("TEMP: ");
+
+  Serial.print(tempC);
+
+  Serial.println(" C");
+
+  Serial.print("WATER LEVEL: ");
+
+  Serial.println(waterValue);
+
+  Serial.println("---------------------");
+
+  // ==================================================
+  // MAIN LCD DISPLAY
+  // ==================================================
+
+  lcd.clear();
+
+  // LINE 1 = DATE
+
   lcd.setCursor(0,0);
 
   lcd.print(now.Day());
+
   lcd.print("/");
+
   lcd.print(now.Month());
-  lcd.print(" ");
 
-  lcd.print(now.Hour());
-  lcd.print(":");
+  lcd.print("/");
 
-  if (now.Minute() < 10) lcd.print("0");
-  lcd.print(now.Minute());
+  lcd.print(now.Year());
+
+  // LINE 2 = TIME + TEMP
 
   lcd.setCursor(0,1);
-  lcd.print("T:");
+
+  lcd.print(now.Hour());
+
+  lcd.print(":");
+
+  if(now.Minute() < 10)
+    lcd.print("0");
+
+  lcd.print(now.Minute());
+
+  lcd.print(" ");
+
   lcd.print(tempC);
+
   lcd.print((char)223);
-  lcd.print("C ");
 
-  // CONTROL LOGIC
+  lcd.print("C");
 
-  if (tempC < 30) {
+  // ==================================================
+  // WATER WARNING
+  // ==================================================
 
-    setColor(0,255,0);   // GREEN
-    noTone(buzzer);
+  if(waterValue < 30) {
 
-  }
+    if(lowWaterWarningShown == false) {
 
-  else if (tempC < 40) {
+      lcd.clear();
 
-    setColor(255,255,0); // YELLOW
-    tone(buzzer, 1000);
-    delay(100);
-    noTone(buzzer);
+      lcd.setCursor(0,0);
 
+      lcd.print("LOW WIPER");
+
+      lcd.setCursor(0,1);
+
+      lcd.print("FLUID ALERT");
+
+      // RED = DANGER
+      setColor(255,0,0);
+
+      tone(buzzer,1500);
+
+      delay(2000);
+
+      noTone(buzzer);
+
+      lowWaterWarningShown = true;
+    }
   }
 
   else {
 
-    setColor(255,0,0);   // RED
-    tone(buzzer, 2000);
+    lowWaterWarningShown = false;
+  }
 
+  // ==================================================
+  // TEMPERATURE STATUS
+  // ==================================================
+
+  // OK = GREEN
+
+  if(tempC < 30) {
+
+    setColor(0,255,0);
+
+    noTone(buzzer);
+  }
+
+  // WARNING = BLUE
+
+  else if(tempC < 40) {
+
+    setColor(0,0,255);
+
+    tone(buzzer,1000);
+
+    delay(200);
+
+    noTone(buzzer);
+  }
+
+  // DANGER = RED
+
+  else {
+
+    setColor(255,0,0);
+
+    tone(buzzer,2000);
   }
 
   delay(1000);
 }
 
-// RGB FUNCTION (COMMON CATHODE FIX)
+// ======================================================
+// RGB FUNCTION
+// ======================================================
+
 void setColor(int r, int g, int b) {
 
   analogWrite(redPin, r);
-  analogWrite(greenPin, g);
-  analogWrite(bluePin, b);
 
+  analogWrite(greenPin, g);
+
+  analogWrite(bluePin, b);
 }
